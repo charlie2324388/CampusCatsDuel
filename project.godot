@@ -1,0 +1,19 @@
+config_version=5
+[application]
+config/name="课间猫擂台"
+config/version="0.4.0"
+run/main_scene="res://duel.tscn"
+config/features=PackedStringArray("4.4","GL Compatibility")
+run/max_fps=60
+boot_splash/show_image=false
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/size/window_width_override=1152
+window/size/window_height_override=648
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.063,0.11,0.13,1)

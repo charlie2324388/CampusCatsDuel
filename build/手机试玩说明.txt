@@ -1,0 +1,14 @@
+﻿课间猫擂台 · iPhone 本机试玩
+
+1. 让电脑和 iPhone 接入同一局域网。在电脑双击同目录的「手机试玩-扫码传包.cmd」，用 iPhone 相机扫描打开的二维码。如果已有「课间猫擂台-iPhone网页版.zip」，也可用平时传文件的方法直接把它存入手机的「文件」。
+2. 点「下载游戏包」。在 iPhone 的「文件」→「下载项」中轻点 ZIP 解压。
+3. 在 App Store 搜索 Local Vibe Runner，导入刚解压的整个文件夹（打开它应能看见 index.html、index.wasm 和 index.pck），点 Preview。把手机横过来，点一下游戏画面，选择角色后开始。免费版提供本机 HTTP 预览。
+   中国区商店：https://apps.apple.com/cn/app/local-vibe-runner/id6762107899
+
+局域网窗口只向同一子网提供游戏包链接。下载完成后可关闭电脑上的传包窗口；手机里的预览由手机本机提供。若校园或访客 Wi‑Fi 隔离设备，改用家庭网络或直接传 ZIP。
+如已有自己的私有 HTTPS 静态站点，也可以将 ZIP 根目录全部文件放在同一目录，Safari 打开该站点对应的 index.html。Godot 官方 Web 导出说明：https://docs.godotengine.org/en/4.7/tutorials/export/exporting_for_web.html
+
+若电脑和 iPhone 早已加入同一个启用了 HTTPS 的 Tailscale 私有网络，也可在项目根目录的 Windows 管理员终端运行：
+    tailscale serve --https=8443 ".\build\iphone"
+手机 Safari 打开命令输出的 HTTPS 地址并在末尾加 /index.html。试玩后在该终端按 Ctrl+C 结束。
+官方示例：https://tailscale.com/docs/reference/examples/serve
