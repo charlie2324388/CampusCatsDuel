@@ -29,6 +29,8 @@ const FIGHT_GUIDE := Rect2(434,100,92,22)
 const PAUSE_GUIDE := Rect2(525,118,178,27)
 const GUIDE_CLOSE := Rect2(681,432,119,30)
 const MODE_BUTTON := Rect2(588,20,167,38)
+const DIFFICULTY_BUTTON := Rect2(767,20,162,38)
+const TOUCH_CLOCK := Rect2(426,4,108,95)
 
 const START_BUTTON := Rect2(694,412,235,47)
 const PAUSE_BUTTON := Rect2(455,74,50,23)
@@ -63,6 +65,10 @@ func _facet(rect: Rect2, tint: Color, lean: float=7, outline: Color=Color.TRANSP
 	_shape(_slab(rect,lean),tint,outline,weight)
 
 func _patch(p: PackedVector2Array, box: Rect2, source: Rect2, sheet: Texture2D, mirror: bool=false) -> void:
+	if game.touch_layout:
+		var fit := minf(source.size.x / box.size.x, source.size.y / box.size.y)
+		var crop_size := box.size * fit
+		source = Rect2(source.get_center() - crop_size * 0.5, crop_size)
 	var coords := PackedVector2Array()
 	for point in p:
 		var local := (point-box.position)/box.size
@@ -97,11 +103,33 @@ func _button(r: Rect2, text: String, primary: bool=false, small: bool=false) -> 
 func _slot(side: int) -> String:
 	return "1P" if side==0 else ("CPU" if game.vs_cpu else "2P")
 
+func _layout_frame(centered: bool = false, top: bool = false) -> Transform2D:
+	if not game.touch_layout: return Transform2D.IDENTITY
+	var safe: Rect2 = game.touch_safe_rect()
+	var factor := minf(safe.size.x / 960.0, safe.size.y / 540.0)
+	var x := safe.get_center().x - 480 * factor if centered else safe.position.x
+	var y := safe.position.y if top else safe.get_center().y - 270 * factor
+	return Transform2D(0.0, Vector2.ONE * factor, 0.0, Vector2(x, y))
+
+func _extra_width() -> float:
+	if not game.touch_layout: return 0.0
+	var safe: Rect2 = game.touch_safe_rect()
+	return maxf(0.0, safe.size.x / _layout_frame().x.x - 960.0)
+
+func _right_anchor(rect: Rect2) -> Rect2:
+	return Rect2(rect.position + Vector2(_extra_width(), 0), rect.size)
+
+func _shade_screen(color: Color) -> void:
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+	draw_rect(Rect2(Vector2.ZERO, size), color)
+	draw_set_transform_matrix(_layout_frame(true))
+
 func _side_rect(side: int) -> Rect2:
-	return Rect2(23+side*456,78,458,228)
+	var half_extra := _extra_width() * 0.5
+	return Rect2(23 + side * (456 + half_extra), 78, 458 + half_extra, 228)
 
 func _roster_rect(index: int) -> Rect2:
-	var stride: float=912.0/game.IDS.size()
+	var stride: float=(912.0 + _extra_width()) / game.IDS.size()
 	return Rect2(24+index*stride,325,stride-4,68)
 
 func _draw() -> void:
@@ -123,27 +151,41 @@ func _draw() -> void:
 			if str(game.announcement)!="": _announcer()
 
 func _select_screen() -> void:
-	draw_rect(Rect2(0,0,960,540),INK)
+	if game.touch_layout:
+		var art: Texture2D = game.BG
+		var cover := maxf(size.x / art.get_width(), size.y / art.get_height())
+		var cover_size := art.get_size() * cover
+		draw_texture_rect(art, Rect2((size - cover_size) * 0.5, cover_size), false)
+		draw_rect(Rect2(Vector2.ZERO, size), Color("#102431da"))
+	else:
+		draw_rect(Rect2(0,0,960,540),INK)
+	draw_set_transform_matrix(_layout_frame())
+	var extra := _extra_width()
 	_shape(PackedVector2Array([Vector2(0,0),Vector2(521,0),Vector2(398,78),Vector2(0,98)]),DARK)
 	_shape(PackedVector2Array([Vector2(23,18),Vector2(322,11),Vector2(300,62),Vector2(18,67)]),PAPER)
 	_shape(PackedVector2Array([Vector2(20,66),Vector2(210,61),Vector2(195,68),Vector2(19,72)]),CORAL)
 	_txt(Vector2(42,54),"课间猫擂台",37,INK,heavy_font)
-	_button(SELECT_GUIDE,"连招表" if game.touch_layout else "F1  连招表",false,true)
-	_button(MODE_BUTTON,"触屏 · 人机对战" if game.touch_layout and game.vs_cpu else "M  "+("人机对战" if game.vs_cpu else "双人对战"),false,true)
-	_txt(Vector2(761,44),"按住防键格挡" if game.touch_layout else "S / ↓  按住格挡",17,PAPER,heavy_font,168,HORIZONTAL_ALIGNMENT_RIGHT)
+	_button(_right_anchor(SELECT_GUIDE),"连招表" if game.touch_layout else "F1  连招表",false,true)
+	if game.touch_layout:
+		_button(_right_anchor(MODE_BUTTON),"难度 · "+("简单" if game.controls.easy_cpu else "普通"),false,true)
+		_txt(Vector2(761+extra,44),"人机对战",17,PAPER,heavy_font,168,HORIZONTAL_ALIGNMENT_RIGHT)
+	else:
+		_button(MODE_BUTTON,"M  "+("人机对战" if game.vs_cpu else "双人对战"),false,true)
+		if game.vs_cpu:
+			_button(DIFFICULTY_BUTTON,"N  难度 · "+("简单" if game.controls.easy_cpu else "普通"),false,true)
 	_side_panel(0)
 	_side_panel(1)
 	var vs := PackedVector2Array([Vector2(478,130),Vector2(516,153),Vector2(499,186),Vector2(476,200),Vector2(444,178),Vector2(455,147)])
-	_shape(vs,GOLD,INK,3)
-	_txt(Vector2(445,178),"VS",32,INK,digits,70,HORIZONTAL_ALIGNMENT_CENTER)
+	_shape(Transform2D(0,Vector2(extra*0.5,0))*vs,GOLD,INK,3)
+	_txt(Vector2(445+extra*0.5,178),"VS",32,INK,digits,70,HORIZONTAL_ALIGNMENT_CENTER)
 	for i in game.IDS.size(): _roster(i)
 	_txt(Vector2(27,430),"正在为 "+_slot(game.cursor)+" 选猫",19,TEAMS[game.cursor],heavy_font)
 	_txt(Vector2(27,455),"先点上方头像选一方，再点下方的猫" if game.touch_layout else "Tab  切换选角方     ← → 或数字 1–5 选猫",14,MIST)
-	_button(START_BUTTON,"进入擂台  →" if game.touch_layout else "进入擂台     ENTER  →",true)
-	draw_line(Vector2(25,474),Vector2(933,474),Color("#4a5d63"),1,true)
+	_button(_right_anchor(START_BUTTON),"进入擂台  →" if game.touch_layout else "进入擂台     ENTER  →",true)
+	draw_line(Vector2(25,474),Vector2(933+extra,474),Color("#4a5d63"),1,true)
 	if game.touch_layout:
-		_txt(Vector2(29,504),"左手移动、跳跃与格挡　　右手轻击、重击、投与必杀",16,PAPER)
-		_txt(Vector2(755,504),"三局两胜  ·  45 秒",15,MIST,heavy_font,174,HORIZONTAL_ALIGNMENT_RIGHT)
+		_txt(Vector2(29,504),"左右移动　上推跳跃　下推格挡",17,PAPER,heavy_font)
+		_txt(Vector2(755+extra,504),"三局两胜  ·  45 秒",15,MIST,heavy_font,174,HORIZONTAL_ALIGNMENT_RIGHT)
 		return
 	_txt(Vector2(29,500),"1P",17,CORAL,digits)
 	_txt(Vector2(73,500),"A / D 移动   W 跳跃   S 格挡   J 轻击   K 重击   L 投   U 一气   I 两气",15,PAPER)
@@ -178,7 +220,7 @@ func _side_panel(side: int) -> void:
 	_txt(Vector2(tag.position.x,tag.position.y+18),_slot(side)+(" 选角中" if active else ""),13,INK,heavy_font,tag.size.x,HORIZONTAL_ALIGNMENT_CENTER)
 	_shape(PackedVector2Array([Vector2(x+5,y+138),Vector2(r.end.x-8,y+125),Vector2(r.end.x-10,y+167),Vector2(x+3,y+177)]),INK)
 	_txt(Vector2(x+20,y+166),game.NAMES[id],28,PAPER,heavy_font)
-	_txt(Vector2(x+240,y+157),STYLES[id],16,col,heavy_font,185,HORIZONTAL_ALIGNMENT_RIGHT)
+	_txt(Vector2(r.end.x-218,y+157),STYLES[id],16,col,heavy_font,185,HORIZONTAL_ALIGNMENT_RIGHT)
 	_txt(Vector2(x+20,y+201),"一气",14,INK,heavy_font)
 	_txt(Vector2(x+64,y+201),game.ONE[id],17,INK,heavy_font)
 	draw_line(Vector2(x+203,y+184),Vector2(x+197,y+208),Color("#b29e81"),1.4,true)
@@ -208,24 +250,45 @@ func _meter(r: Rect2,portion: float,c: Color,reverse: bool) -> void:
 
 func _battle() -> void:
 	for side in range(2):
+		var edge := Vector2(_extra_width() if side == 1 else 0.0, 0)
+		draw_set_transform_matrix(_layout_frame(false, true).translated_local(edge))
 		_status(side)
-		_energy(side)
-		_foot_tag(side)
+		if game.touch_layout: _touch_energy(side)
+		else: _energy(side)
 		if int(game.chain_hits[side])>=2 and float(game.chain_linger[side])>0.0:
 			_combo_readout(side)
 		if float(game.notice_left[side])>0.0 and str(game.notice[side])!="":
-			var r:=Rect2(24 if side==0 else 717,82,219,30)
+			var r:=Rect2(24 if side==0 else 717,89 if game.touch_layout else 82,219,30)
 			_facet(r,Color("#162b39eb"),7,TEAMS[side],1)
 			_txt(r.position+Vector2(0,21),game.notice[side],15,TEAMS[side],heavy_font,r.size.x,HORIZONTAL_ALIGNMENT_CENTER)
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+		_foot_tag(side)
+	draw_set_transform_matrix(_layout_frame(true, true))
 	var hex:=PackedVector2Array([Vector2(459,6),Vector2(501,6),Vector2(522,21),Vector2(517,58),Vector2(498,72),Vector2(462,72),Vector2(443,58),Vector2(438,21)])
 	_shape(hex,INK,PAPER,2)
 	_txt(Vector2(442,48),"%02d"%ceili(game.seconds_left),36,GOLD if game.seconds_left>10 else CORAL,digits,76,HORIZONTAL_ALIGNMENT_CENTER)
 	_txt(Vector2(445,64),"第 %d 局"%game.round_no,12,PAPER,heavy_font,70,HORIZONTAL_ALIGNMENT_CENTER)
 	if game.state=="fight":
-		_facet(PAUSE_BUTTON,Color("#172933e6"),5)
-		_txt(Vector2(455,90),"暂停",12,PAPER,heavy_font,50,HORIZONTAL_ALIGNMENT_CENTER)
-		_facet(FIGHT_GUIDE,Color("#172933df"),5)
-		_txt(Vector2(434,115),"连招表" if game.touch_layout else "F1   连招表",12,PAPER,heavy_font,92,HORIZONTAL_ALIGNMENT_CENTER)
+		if game.touch_layout:
+			_facet(Rect2(444,72,72,25),INK,5,PAPER,1)
+			_txt(Vector2(444,90),"Ⅱ 暂停",15,PAPER,heavy_font,72,HORIZONTAL_ALIGNMENT_CENTER)
+		else:
+			_facet(PAUSE_BUTTON,Color("#172933e6"),5)
+			_txt(Vector2(455,90),"暂停",12,PAPER,heavy_font,50,HORIZONTAL_ALIGNMENT_CENTER)
+			_facet(FIGHT_GUIDE,Color("#172933df"),5)
+			_txt(Vector2(434,115),"F1   连招表",12,PAPER,heavy_font,92,HORIZONTAL_ALIGNMENT_CENTER)
+
+func _touch_energy(side: int) -> void:
+	var left := side == 0
+	var span := (336 + _extra_width() * 0.5 - 5) * 0.5
+	var start_x := 81.0 if left else 543.0 - _extra_width() * 0.5
+	var energy: float = game.fighters[side].energy
+	for i in range(2):
+		var x := start_x + (i if left else 1 - i) * (span + 5)
+		var portion := clampf((energy - 100.0*i) / 100.0, 0, 1)
+		var bar := Rect2(x,73,span,9)
+		_facet(bar.grow(2.0), INK, 3)
+		_meter(bar, portion, GOLD, not left)
 
 func _combo_readout(side: int) -> void:
 	var left: bool=side==0
@@ -235,7 +298,8 @@ func _combo_readout(side: int) -> void:
 	var route:=str(game.chain_route[side])
 	var keys: PackedStringArray=[]
 	for letter in route:
-		if left: keys.append(letter)
+		if game.touch_layout: keys.append({"J":"轻","K":"重","U":"一气","I":"两气"}.get(letter,letter))
+		elif left: keys.append(letter)
 		elif game.vs_cpu: keys.append({"J":"轻","K":"重","U":"一气","I":"两气"}.get(letter,letter))
 		else: keys.append({"J":"逗","K":"句","U":"[","I":"]"}.get(letter,letter))
 	var sequence:=" › ".join(keys)
@@ -246,7 +310,7 @@ func _combo_readout(side: int) -> void:
 	_txt(Vector2(x+10,origin.y+49),sequence,14,PAPER,heavy_font,label_width-20,align)
 
 func _combo_guide() -> void:
-	draw_rect(Rect2(0,0,960,540),Color("#0a1726cf"))
+	_shade_screen(Color("#0a1726cf"))
 	var panel:=PackedVector2Array([Vector2(145,73),Vector2(792,64),Vector2(821,88),Vector2(817,464),Vector2(793,484),Vector2(137,474)])
 	_shape(Transform2D(0,Vector2(5,6))*panel,BLACK)
 	_shape(panel,PAPER,INK,3)
@@ -263,7 +327,7 @@ func _combo_guide() -> void:
 	_guide_route(Vector2(491,229),"JJI","接两气大招",true)
 	_guide_route(Vector2(491,273),"KKI","重击接两气",true)
 	draw_line(Vector2(163,329),Vector2(794,329),Color("#beac8e"),1.5,true)
-	_txt(Vector2(171,354),"1P   J 轻击   K 重击   L 投   U 一气   I 两气",16,INK,heavy_font)
+	_txt(Vector2(171,354),"右侧按钮   轻击  /  重击  /  投  /  一气  /  两气" if game.touch_layout else "1P   J 轻击   K 重击   L 投   U 一气   I 两气",16,INK,heavy_font)
 	_txt(Vector2(171,383),"横屏双手操作，按住方向的同时可以出招。" if game.touch_layout else "2P   逗号轻击   句号重击   / 投   [ 一气   ] 两气",15,INK)
 	_txt(Vector2(171,411),"贴身投可破格挡；起跳躲投，双方同时出投可拆。",15,INK,heavy_font)
 	_txt(Vector2(171,444),"两气压一气，一气压普通攻击。同级先打中的一方占先。",14,DARK)
@@ -277,7 +341,8 @@ func _guide_route(at: Vector2, route: String, caption: String, meter: bool) -> v
 		var fill:=GOLD if key in ["I","U"] else (CORAL if key=="K" else Color("#92d4df"))
 		if i>0: draw_line(Vector2(x-6,at.y+14),Vector2(x,at.y+14),DARK,2,true)
 		_facet(Rect2(x,at.y,28,28),fill,3,INK,1.5)
-		_txt(Vector2(x,at.y+21),key,18,INK,digits,28,HORIZONTAL_ALIGNMENT_CENTER)
+		var label: String = {"J":"轻","K":"重","U":"一气","I":"两气"}.get(key, key) if game.touch_layout else key
+		_txt(Vector2(x,at.y+21),label,13 if label.length() > 1 else 18,INK,heavy_font if game.touch_layout else digits,28,HORIZONTAL_ALIGNMENT_CENTER)
 		x+=34
 	_txt(at+Vector2(116 if meter else 147,21),caption,16,INK,heavy_font)
 
@@ -285,22 +350,23 @@ func _status(side: int) -> void:
 	var f=game.fighters[side]
 	var id: int=game.picks[side]
 	var col: Color=TEAMS[side]
-	var x:=13.0 if side==0 else 525.0
-	_facet(Rect2(x,11,423,62),Color("#162a39ef"),10,BLACK,2)
 	var left: bool=side==0
+	var extra := _extra_width() * 0.5
+	var x:=13.0 if left else 525.0 - extra
+	_facet(Rect2(x,11,423+extra,62),Color("#162a39ef"),10,BLACK,2)
 	var av:=Vector2(48 if left else 912,42)
 	_badge(av,24,id,col)
 	var tag:=Rect2(81 if left else 836,18,43,19)
 	_facet(tag,col,4)
 	_txt(tag.position+Vector2(0,15),_slot(side),13,INK,digits,tag.size.x,HORIZONTAL_ALIGNMENT_CENTER)
 	_txt(Vector2(133 if left else 629,34),game.NAMES[id],18,PAPER,heavy_font,197,HORIZONTAL_ALIGNMENT_LEFT if left else HORIZONTAL_ALIGNMENT_RIGHT)
-	var hp_left:=81.0 if left else 543.0
-	_meter(Rect2(hp_left,44,336,13),float(f.hp)/maxf(1,f.max_hp),col,not left)
+	var hp_left:=81.0 if left else 543.0-extra
+	_meter(Rect2(hp_left,44,336+extra,13),float(f.hp)/maxf(1,f.max_hp),col,not left)
 	for unit in range(2):
 		var at:=Vector2(93+unit*16 if left else 867-unit*16,65)
 		draw_circle(at,5.1,Color("#566772"),true,-1,true)
 		if int(game.wins[side])>unit: draw_circle(at,4.1,GOLD,true,-1,true)
-	_txt(Vector2(262 if left else 542,68),"%d / %d"%[f.hp,f.max_hp],11,MIST,digits,153,HORIZONTAL_ALIGNMENT_RIGHT if left else HORIZONTAL_ALIGNMENT_LEFT)
+	_txt(Vector2(262+extra if left else 542-extra,68),"%d / %d"%[f.hp,f.max_hp],11,MIST,digits,153,HORIZONTAL_ALIGNMENT_RIGHT if left else HORIZONTAL_ALIGNMENT_LEFT)
 
 func _energy(side: int) -> void:
 	var f=game.fighters[side]
@@ -322,12 +388,13 @@ func _energy(side: int) -> void:
 func _foot_tag(side: int) -> void:
 	var f=game.fighters[side]
 	var point: Vector2=get_viewport().canvas_transform*f.global_position
-	var center:=Vector2(clampf(point.x,25,935),minf(466,point.y+15))
+	var center:=Vector2(clampf(point.x,25,size.x-25),minf(size.y-14 if game.touch_layout else 466,point.y+15))
 	var r:=Rect2(center-Vector2(18,9),Vector2(36,17))
 	_facet(r,TEAMS[side],4,INK,1.5)
 	_txt(Vector2(r.position.x,r.position.y+13),_slot(side),11,INK,digits,36,HORIZONTAL_ALIGNMENT_CENTER)
 
 func _announcer() -> void:
+	draw_set_transform_matrix(_layout_frame(true))
 	var line:=str(game.announcement)
 	if line.is_empty(): return
 	var fw:=clampf(heavy_font.get_string_size(line,HORIZONTAL_ALIGNMENT_LEFT,-1,41).x+68,175,770)
@@ -338,7 +405,7 @@ func _announcer() -> void:
 
 func _sheet() -> void:
 	var paused_screen: bool=game.state=="pause"
-	draw_rect(Rect2(0,0,960,540),Color("#0b1829b8"))
+	_shade_screen(Color("#0b1829b8"))
 	var sheet:=PackedVector2Array([Vector2(210,106),Vector2(720,95),Vector2(750,119),Vector2(739,415),Vector2(722,438),Vector2(201,428)])
 	_shape(Transform2D(0,Vector2(5,6))*sheet,BLACK)
 	_shape(sheet,PAPER,INK,3)
@@ -350,7 +417,7 @@ func _sheet() -> void:
 	if paused_screen:
 		_button(PAUSE_GUIDE,"查看连招表" if game.touch_layout else "F1  查看连招表",false,true)
 		_txt(Vector2(247,193),"课间休息",37,INK,heavy_font)
-		_txt(Vector2(247,227),"左手按方向移动，按跳起跳，按住防键格挡。" if game.touch_layout else "1P   A / D 移动   W 跳   S 格挡   J 轻   K 重   L 投   U 一气   I 两气",15,INK,heavy_font)
+		_txt(Vector2(247,227),"左右推摇杆移动，上推跳跃，下推并按住格挡。" if game.touch_layout else "1P   A / D 移动   W 跳   S 格挡   J 轻   K 重   L 投   U 一气   I 两气",15,INK,heavy_font)
 		_txt(Vector2(247,255),"右手点轻、重或投，攒气后可点一气或两气。" if game.touch_layout else "2P   ← / → 移动   ↑ 跳   ↓ 格挡   逗号轻   句号重   / 投   [ 一气   ] 两气",15,INK,heavy_font)
 		_txt(Vector2(247,282),"轻、轻命中后接两气，可以打出带特写的连招。" if game.touch_layout else "2P 小键盘：1 轻击、2 重击、3 投、4 一气、5 两气。",14,DARK)
 		_txt(Vector2(247,304),"贴身投能破站防；起跳可躲，双方同时出投可拆。",14,DARK)
@@ -370,9 +437,13 @@ func _gui_input(event: InputEvent) -> void:
 	var at: Vector2=event.position
 	match game.state:
 		"select":
-			if SELECT_GUIDE.has_point(at): game.toggle_guide()
-			elif START_BUTTON.has_point(at): game.start_match()
-			elif MODE_BUTTON.has_point(at) and not game.touch_layout: game.toggle_mode()
+			at = _layout_frame().affine_inverse() * at
+			if _right_anchor(SELECT_GUIDE).has_point(at): game.toggle_guide()
+			elif _right_anchor(START_BUTTON).has_point(at): game.start_match()
+			elif _right_anchor(MODE_BUTTON).has_point(at):
+				if game.touch_layout: game.toggle_difficulty()
+				else: game.toggle_mode()
+			elif not game.touch_layout and DIFFICULTY_BUTTON.has_point(at): game.toggle_difficulty()
 			else:
 				for s in range(2):
 					if _side_rect(s).has_point(at):
@@ -383,15 +454,19 @@ func _gui_input(event: InputEvent) -> void:
 						game.choose(i)
 						return
 		"fight":
-			if PAUSE_BUTTON.has_point(at): game.toggle_pause()
-			elif FIGHT_GUIDE.has_point(at): game.toggle_guide()
+			at = _layout_frame(true, true).affine_inverse() * at
+			if (TOUCH_CLOCK if game.touch_layout else PAUSE_BUTTON).has_point(at): game.toggle_pause()
+			elif not game.touch_layout and FIGHT_GUIDE.has_point(at): game.toggle_guide()
 		"guide":
+			at = _layout_frame(true).affine_inverse() * at
 			if GUIDE_CLOSE.has_point(at): game.toggle_guide()
 		"pause":
+			at = _layout_frame(true).affine_inverse() * at
 			if PAUSE_GUIDE.has_point(at): game.toggle_guide()
 			elif OVER_MAIN.has_point(at): game.toggle_pause()
 			elif OVER_BACK.has_point(at): game.to_select()
 		"match_end":
+			at = _layout_frame(true).affine_inverse() * at
 			if OVER_MAIN.has_point(at): game.rematch()
 			elif OVER_BACK.has_point(at): game.to_select()
 

@@ -7,6 +7,7 @@ const KEYSETS := [
 ]
 const ATTACKS := ["light", "heavy", "special", "super"]
 
+var easy_cpu := false
 var rng := RandomNumberGenerator.new()
 var _clock := 0.0
 var _reaction := 0.18
@@ -41,7 +42,7 @@ func _action_name(seat: int, move: String) -> StringName:
 
 func reset_round() -> void:
 	_clock = 0.0
-	_reaction = rng.randf_range(0.16, 0.21)
+	_reaction = rng.randf_range(0.38, 0.55) if easy_cpu else rng.randf_range(0.16, 0.21)
 	_think_in = 0.0
 	_sample_in = 0.0
 	_jump_ready = 0.0
@@ -85,8 +86,11 @@ func read_cpu(actor, opponent, delta: float) -> Dictionary:
 	if _seen.is_empty() or actor.hp <= 0:
 		return action
 	if _think_in <= 0.0:
-		_think_in = rng.randf_range(0.13, 0.23)
-		_decide(actor, action)
+		if easy_cpu:
+			_decide_easy(actor, action)
+		else:
+			_think_in = rng.randf_range(0.13, 0.23)
+			_decide(actor, action)
 	action.left = _walk < 0
 	action.right = _walk > 0
 	action.down = _guard_down and actor.grounded
@@ -95,6 +99,34 @@ func read_cpu(actor, opponent, delta: float) -> Dictionary:
 func _jump(action: Dictionary) -> void:
 	action.jump = true
 	_jump_ready = _clock + rng.randf_range(1.05, 2.1)
+
+func _decide_easy(actor, action: Dictionary) -> void:
+	_think_in = rng.randf_range(0.34, 0.53)
+	_walk = 0
+	_guard_down = false
+	if actor.launched or actor.stun_left > 0.0 or not actor.grounded or actor.state in ATTACKS or actor.state in ["throw", "throw_hold", "throw_recover", "grabbed"]:
+		return
+	var seen_pos: Vector2 = _seen.position
+	var dx: float = seen_pos.x - actor.position.x
+	var reach := maxf(99.0, actor.config.width + _seen.body_width + 7.0)
+	if absf(dx) > reach:
+		if rng.randf() < 0.83:
+			_walk = int(signf(dx))
+		return
+	if absf(seen_pos.y - actor.position.y) > 78.0:
+		return
+	var roll := rng.randf()
+	if roll < 0.20:
+		_guard_down = true
+	elif roll >= 0.39:
+		if roll > 0.94 and actor.energy >= 100.0:
+			action.special = true
+		elif roll > 0.74:
+			action.heavy = true
+		else:
+			action.light = true
+		# Leave a readable opening after each single attack.
+		_think_in = rng.randf_range(0.88, 1.23)
 
 func _decide(actor, action: Dictionary) -> void:
 	_walk = 0

@@ -254,6 +254,28 @@ func _cpu() -> void:
 		if "throw" in throws: break
 	check("throw" in throws, "CPU breaks a sustained standing guard with a close throw")
 	_dispose(p)
+	# A close target gives the easy CPU repeated opportunities to act.
+	p = _pair("mirinda", "doctor")
+	p[0].position.x = 475
+	p[1].position.x = 565
+	var easy = Controls.new()
+	easy.easy_cpu = true
+	easy.rng.seed = 7261
+	easy.reset_round()
+	var swings := 0
+	var last_swing := -1000
+	var has_openings := true
+	var uses_advanced := false
+	for frame in range(1800):
+		p[1].energy = 200
+		var input: Dictionary = easy.read_cpu(p[1], p[0], STEP)
+		if input.light or input.heavy or input.special:
+			has_openings = has_openings and frame >= 22 and frame - last_swing >= 52
+			swings += 1
+			last_swing = frame
+		uses_advanced = uses_advanced or input.throw or input.super
+	check(swings >= 5 and has_openings and not uses_advanced, "easy CPU fights with spaced single strikes and leaves counterattack windows")
+	_dispose(p)
 	var attacks := {}
 	var guarded_without_stepping := false
 	var retreated_without_guarding := false

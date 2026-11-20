@@ -7,7 +7,7 @@
 在本仓库的 **Releases** 页面下载试玩版。
 
 - **Windows** 支持人机和同键盘双人。解压 Windows 版 ZIP，双击 `CampusCatsDuel.exe`，同目录的 `CampusCatsDuel.pck` 是游戏数据。
-- **iPhone** 支持横屏触控人机对战。将 Web 版 ZIP 解压到提供 HTTPS 的静态网站后，用 Safari 打开；也可以把 ZIP 保存到 iPhone 的“文件”，解压，再用 Local Vibe Runner 导入包含 `index.html` 的整个文件夹，点 **Preview**。手机左右手可以同时移动和出招。
+- **iPhone** 支持横屏触控人机对战。将 Web 版 ZIP 解压到提供 HTTPS 的静态网站后，用 Safari 打开；也可以把 ZIP 保存到 iPhone 的“文件”，解压，再用 Local Vibe Runner 导入包含 `index.html` 的整个文件夹，点 **Preview**。在线试玩可直接用 Safari 横屏打开。左手推摇杆移动、跳跃或格挡，右手点轻击、重击、投技和两档必杀。手机初次进入默认简单，点选角页上方的难度可切回普通。[手机网页版](https://charlie2324388.github.io/CampusCatsDuel/)
 
 ## 操作
 

@@ -1,38 +1,212 @@
 <!doctype html>
-<html lang="zh-CN"><head>
+<html lang="zh-CN">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=contain">
-<meta name="theme-color" content="#14202e">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#101e28">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="课间猫擂台">
+<!-- mobile-install -->
 <title>$GODOT_PROJECT_NAME</title>
 <style>
-:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
-*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:#111b26;overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none}
-#canvas{display:block;width:100%;height:100%;border:0;outline:none;touch-action:none;-webkit-touch-callout:none}
-#boot{position:fixed;inset:0;display:grid;place-content:center;gap:12px;text-align:center;padding:22px;background:#14202e;color:#fbf2dc}
-h1{font-size:clamp(22px,5vw,42px);letter-spacing:.08em;margin:0}p{margin:0;font-size:15px;line-height:1.55;color:#ded6c7}
-progress{width:min(280px,76vw);height:8px;margin:5px auto;accent-color:#ffb167}
-button{margin:auto;padding:8px 20px;border:1px solid #ffbd83;border-radius:30px;color:#ffe5be;background:#333f46}
-[hidden]{display:none!important}#turn{display:none;position:fixed;left:0;right:0;bottom:max(14px,env(safe-area-inset-bottom));margin:0;text-align:center;color:#ffe4ba;pointer-events:none;font-size:14px}
-@media (orientation:portrait) and (pointer:coarse){#turn{display:block}}
-</style>$GODOT_HEAD_INCLUDE</head>
+:root{--safe-top:env(safe-area-inset-top,0px);--safe-right:env(safe-area-inset-right,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--safe-left:env(safe-area-inset-left,0px);color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#101e28;color:#fff0d1}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;touch-action:none}
+#frame{position:fixed;inset:0;width:100%;height:100%;width:100dvw;height:100dvh;padding:var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);background:#101e28}
+#canvas{position:absolute;inset:0;display:block;width:100%;height:100%;border:0;outline:none;touch-action:none;-webkit-touch-callout:none}
+[hidden]{display:none!important}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:max(12px,var(--safe-top)) max(20px,var(--safe-right)) max(12px,var(--safe-bottom)) max(20px,var(--safe-left));text-align:center;background:radial-gradient(ellipse at 50% 65%,#223a44,#101e28 78%)}
+h1,h2,p{margin:0;text-wrap:balance}
+h1,h2{font-size:clamp(26px,5vw,41px);letter-spacing:.02em;line-height:1.18}
+p{max-width:32em;font-size:15px;line-height:1.5;color:#dfdecd}
+button{font:inherit;font-weight:700;font-size:17px;color:#192c37;background:#ffcf67;border:0;border-radius:18px 6px;padding:11px 25px;min-height:46px;cursor:pointer}
+button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.hint{font-size:13px;color:#c1cac6}
+progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
+</style>
+$GODOT_HEAD_INCLUDE
+</head>
 <body>
-<canvas id="canvas" tabindex="0" aria-label="课间猫擂台游戏画面"></canvas>
-<div id="boot"><h1>课间猫擂台</h1><p id="status" role="status">正在载入擂台…</p><progress id="progress"></progress><button id="retry" hidden>重新载入</button></div>
-<p id="turn">横过手机，双手操控更顺手</p>
-<script src="$GODOT_URL"></script>
+<main id="frame">
+  <canvas id="canvas" tabindex="0" aria-label="课间猫擂台游戏画面"></canvas>
+  <section id="boot" class="screen">
+    <h1>课间猫擂台</h1>
+    <p id="status" role="status" hidden></p>
+    <progress id="progress" aria-label="游戏加载进度" hidden></progress>
+    <button id="start" type="button" hidden>进入游戏</button>
+    <p class="hint" id="install" hidden></p>
+    <button id="retry" type="button" hidden>重新载入</button>
+  </section>
+  <section id="turn" class="screen" hidden>
+    <h2>横过手机，进入擂台</h2>
+    <p>左右手同时操作，竖屏锁定时请先解锁旋转。</p>
+    <p id="turn-status" class="hint" hidden></p>
+    <p class="hint" id="turn-install" hidden></p>
+  </section>
+  <section id="desktop" class="screen" hidden>
+    <h1>课间猫擂台</h1>
+    <p>用手机打开本网址，横屏进入游戏。</p>
+  </section>
+</main>
+<!-- mobile-cache -->
 <script>
-(function () {
-  const status=document.getElementById("status"), meter=document.getElementById("progress"), retry=document.getElementById("retry");
-  function failure(message){status.textContent=message;meter.hidden=true;retry.hidden=false;}
-  retry.onclick=()=>location.reload();
-  if(!window.isSecureContext){failure("请通过受信任的 HTTPS 地址打开游戏。");return;}
-  const missing=Engine.getMissingFeatures({threads:$GODOT_THREADS_ENABLED});
-  if(missing.length){failure("此浏览器缺少运行支持："+missing.join("、"));return;}
-  const engine=new Engine($GODOT_CONFIG);
-  engine.startGame({canvas:document.getElementById("canvas"),onProgress:(done,total)=>{
-    if(total){meter.max=total;meter.value=done;status.textContent="正在载入擂台… "+Math.round(100*done/total)+"%";}
-  }}).then(()=>{document.getElementById("boot").remove();document.getElementById("canvas").focus();}).catch(err=>{
-    console.error(err);failure("擂台载入失败。请检查网络，再重新载入。");
-  });
+(() => {
+  const el = id => document.getElementById(id);
+  const canvas = el("canvas");
+  const boot = el("boot");
+  const start = el("start");
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const touchMobile = ios || /Android|Mobile/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches &&
+    Math.min(screen.width, screen.height) <= 820);
+  if (!touchMobile) {
+    boot.hidden = true;
+    el("desktop").hidden = false;
+    return;
+  }
+  const portrait = matchMedia("(orientation: portrait)");
+  const standalone = navigator.standalone === true ||
+    matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches;
+  const canFullscreen = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const hint = ios && !standalone ? "想要全屏？在 Safari 的分享菜单中选择“添加到主屏幕”，再从图标打开。" : "";
+  for (const id of ["install", "turn-install"]) {
+    el(id).textContent = hint;
+    el(id).hidden = !hint;
+  }
+  let loading = false;
+  let ready = false;
+  let prepared = false;
+  let preparation;
+  function resize() {
+    const element = el("frame");
+    const frame = element.getBoundingClientRect();
+    const padding = getComputedStyle(element);
+    window.campusCatsViewport = {
+      width: frame.width, height: frame.height,
+      left: parseFloat(padding.paddingLeft), right: parseFloat(padding.paddingRight),
+      top: parseFloat(padding.paddingTop), bottom: parseFloat(padding.paddingBottom)
+    };
+    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1,Math.round(frame.width * scale));
+    const h = Math.max(1,Math.round(frame.height * scale));
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+  }
+  function rotate() {
+    resize();
+    el("turn").hidden = !portrait.matches;
+    if (ready && portrait.matches) canvas.blur();
+    if (!portrait.matches && standalone && !loading) launch();
+  }
+  function fail(message) {
+    el("status").hidden = false;
+    el("status").textContent = message;
+    el("progress").hidden = true;
+    el("retry").hidden = false;
+    el("install").hidden = true;
+    start.hidden = true;
+  }
+  function loadDriver() {
+    return new Promise((resolve,reject) => {
+      const script = document.createElement("script");
+      script.src = "$GODOT_URL";
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.append(script);
+    });
+  }
+  function status(text) {
+    if (ready || !boot.isConnected) return;
+    for (const id of ["status", "turn-status"]) {
+      const label = el(id);
+      label.textContent = text;
+      label.hidden = false;
+    }
+  }
+  function progress(done, total) {
+    if (prepared || ready || !total) return;
+    const bar = el("progress");
+    bar.hidden = false;
+    bar.max = total;
+    bar.value = done;
+    status(done >= total ? "下载完成，正在准备对战引擎…" :
+      "正在下载游戏资源 · " + Math.floor(100 * done / total) + "%");
+  }
+  function prepare() {
+    if (preparation) return preparation;
+    preparation = (async () => {
+      if (!window.isSecureContext) throw new Error("请通过 HTTPS 打开这个网址。");
+      status("正在连接擂台…");
+      await loadDriver();
+      const missing = Engine.getMissingFeatures({threads:$GODOT_THREADS_ENABLED});
+      if (missing.length) throw new Error("此浏览器缺少运行支持：" + missing.join("、"));
+      const config = $GODOT_CONFIG;
+      const engine = new Engine({...config, canvas, canvasResizePolicy:0, onProgress:progress});
+      const exe = config.executable;
+      const pack = config.mainPack || exe + ".pck";
+      // Begin compiling the engine while the game data downloads. start() uses this same instance.
+      await Promise.all([Engine.load(exe, config.fileSizes[exe + ".wasm"]), engine.init(exe), engine.preloadFile(pack, pack)]);
+      prepared = true;
+      el("progress").hidden = true;
+      status(loading ? "正在打开选角界面…" : "已准备好，可以进入游戏");
+      return {engine, pack, args:config.args || []};
+    })();
+    return preparation;
+  }
+  function showError(error) {
+    console.error(error);
+    const message = error instanceof Error && /^(请通过|此浏览器)/.test(error.message)
+      ? error.message : "载入失败，请检查网络后重试。";
+    status(message);
+    fail(message);
+  }
+  async function launch() {
+    if (loading) return;
+    loading = true;
+    start.hidden = true;
+    el("install").hidden = true;
+    try {
+      const {engine, pack, args} = await prepare();
+      status("正在打开选角界面…");
+      resize();
+      await engine.start({args:["--main-pack",pack,...args]});
+      ready = true;
+      boot.remove();
+      el("turn-status").hidden = true;
+      resize();
+      if (portrait.matches) canvas.blur();
+      else canvas.focus({preventScroll:true});
+    } catch (err) {
+      showError(err);
+    }
+  }
+  start.textContent = canFullscreen && !standalone ? "全屏进入游戏" : "进入游戏";
+  start.hidden = false;
+  start.onclick = () => {
+    if (canFullscreen && !standalone) {
+      const root = document.documentElement;
+      const request = root.requestFullscreen || root.webkitRequestFullscreen;
+      if (request) {
+        try { Promise.resolve(request.call(root)).then(() => screen.orientation?.lock?.("landscape")).catch(()=>{}); } catch {}
+      }
+    }
+    launch();
+  };
+  el("retry").onclick = () => location.reload();
+  new ResizeObserver(resize).observe(el("frame"));
+  window.addEventListener("resize", rotate);
+  window.visualViewport?.addEventListener("resize", resize);
+  document.addEventListener("fullscreenchange", resize);
+  if (portrait.addEventListener) portrait.addEventListener("change",rotate);
+  else portrait.addListener(rotate);
+  rotate();
+  if (!loading && !navigator.connection?.saveData && !matchMedia("(prefers-reduced-data: reduce)").matches) {
+    prepare().catch(showError);
+  }
 })();
-</script></body></html>
+</script>
+</body>
+</html>

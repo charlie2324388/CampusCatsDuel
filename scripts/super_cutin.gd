@@ -17,6 +17,7 @@ var active := false
 var elapsed := 0.0
 var fighter_id := "mirinda"
 var player_side := 0
+var safe_area := Rect2()
 var headline: Font = preload("res://scripts/arena_fonts.gd").interface_font(900)
 
 func _ready() -> void:
@@ -60,24 +61,28 @@ func _draw() -> void:
 	var retract := smoothstep(DURATION - 0.12, DURATION, elapsed)
 	var open := reveal * (1.0 - retract)
 	var tint: Color = COLORS[fighter_id]
-	var scale_to_screen := size / Vector2(960.0, 540.0)
-	draw_set_transform(Vector2.ZERO, 0, scale_to_screen)
-	draw_rect(Rect2(0, 0, 960, 540), Color(0.035, 0.045, 0.07, open * 0.75))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.035, 0.045, 0.07, open * 0.75))
+	var safe := safe_area if safe_area.has_area() else Rect2(Vector2.ZERO, size)
+	var factor := minf(safe.size.x / 960.0, safe.size.y / 540.0)
+	var screen_width := size.x / factor
+	var safe_left := safe.position.x / factor
+	var safe_right := safe.end.x / factor
+	draw_set_transform(Vector2(0, safe.get_center().y - 270.0 * factor), 0, Vector2.ONE * factor)
 	# The envelope opens from a single diagonal seam. The illustration keeps its
 	# aspect ratio as the panel opens and drifts forward during the held pose.
 	var top := lerpf(267, 87, open)
 	var bottom := lerpf(267, 431, open)
 	var edge := 25.0
-	var panel := PackedVector2Array([Vector2(0, top+edge), Vector2(960, top-edge), Vector2(960, bottom-edge), Vector2(0, bottom+edge)])
+	var panel := PackedVector2Array([Vector2(0, top+edge), Vector2(screen_width, top-edge), Vector2(screen_width, bottom-edge), Vector2(0, bottom+edge)])
 	if bottom - top < 1.0:
 		draw_line(panel[0], panel[1], Color(tint, 0.8), 2.0, true)
 		return
 	var art: Texture2D = ART[fighter_id]
 	var zoom := 1.0 + 0.045 * elapsed / DURATION
-	var sample_size := Vector2(960.0, 395.0) * maxf(1.0, (960.0 / 395.0) / art.get_size().aspect()) * zoom
+	var sample_size := Vector2(screen_width, 395.0) * maxf(1.0, (screen_width / 395.0) / art.get_size().aspect()) * zoom
 	# Fill both axes with the source aspect, centering the eyes well inside the frame.
 	sample_size.x = sample_size.y * art.get_size().aspect()
-	var origin := Vector2(480, 259) - sample_size * 0.5
+	var origin := Vector2(screen_width * 0.5, 259) - sample_size * 0.5
 	origin.x += lerpf(-8.0, 5.0, elapsed / DURATION)
 	var uv := PackedVector2Array()
 	for point in panel:
@@ -92,9 +97,9 @@ func _draw() -> void:
 		return
 	var title: String = TITLES[fighter_id]
 	var text_width := headline.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 52).x
-	var x := 912.0 - text_width + 48 * (1.0 - letters)
+	var x := safe_right - 48.0 - text_width + 48 * (1.0 - letters)
 	var y := bottom - 10
-	var leg := PackedVector2Array([Vector2(x-35,y-51), Vector2(960,y-70), Vector2(960,y+16), Vector2(x-61,y+32)])
+	var leg := PackedVector2Array([Vector2(x-35,y-51), Vector2(screen_width,y-70), Vector2(screen_width,y+16), Vector2(x-61,y+32)])
 	draw_colored_polygon(leg, Color(INK, 0.93 * letters))
 	draw_line(leg[3], leg[2], Color(tint, letters), 3, true)
 	draw_string_outline(headline, Vector2(x+1,y+4), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 52, 6, Color(INK, letters))
@@ -102,6 +107,6 @@ func _draw() -> void:
 	var label := "%dP  /  %s    ·    两气奥义" % [player_side+1, NAMES[fighter_id]]
 	var tag_y := top+14
 	var tag_width := headline.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x + 48
-	var tag := PackedVector2Array([Vector2(0,tag_y-32), Vector2(tag_width+19,tag_y-40), Vector2(tag_width,tag_y-8), Vector2(0,tag_y)])
+	var tag := PackedVector2Array([Vector2(0,tag_y-32), Vector2(safe_left+tag_width+19,tag_y-40), Vector2(safe_left+tag_width,tag_y-8), Vector2(0,tag_y)])
 	draw_colored_polygon(tag, Color(INK, letters))
-	draw_string(headline, Vector2(20,tag_y-13), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(tint, letters))
+	draw_string(headline, Vector2(safe_left+20,tag_y-13), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(tint, letters))

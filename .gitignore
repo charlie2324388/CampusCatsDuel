@@ -13,6 +13,12 @@
 /dev/*
 !/dev/.gdignore
 !/dev/mobile_shell.html
+!/dev/prepare_mobile_site.py
+!/dev/build_mobile_pack.py
+!/dev/build_mobile_http.py
+!/dev/original_cutin_webp.py
+!/dev/build_mobile_cache.py
+!/dev/mobile_asset_cache.js
 !/dev/手机试玩传包.py
 !/dev/duel_regression.gd
 !/dev/combo_checks.gd

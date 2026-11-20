@@ -35,7 +35,10 @@ var chain_hits := [0,0]
 var chain_route := ["",""]
 var chain_linger := [0.0,0.0]
 var controls = Controls.new()
+var arena_view := Node2D.new()
 var arena := Node2D.new()
+var bg := Sprite2D.new()
+var pavement: Sprite2D
 var fx = Effects.new()
 var sound = Mixer.new()
 var hud = UI.new()
@@ -43,14 +46,17 @@ var shake := 0.0
 var motor_active := [false,false]
 var closing := false
 var touch_layout := false
+var touch_css_scale := 1.0
+var safe_area := Rect2(0, 0, 960, 540)
+const DIFFICULTY_SETTINGS := "user://duel.cfg"
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	touch_layout=DisplayServer.is_touchscreen_available() or "--touch-preview" in OS.get_cmdline_user_args()
 	add_child(sound)
-	add_child(arena)
+	add_child(arena_view)
+	arena_view.add_child(arena)
 	arena.process_mode=Node.PROCESS_MODE_PAUSABLE
-	var bg := Sprite2D.new()
 	bg.texture=BG
 	bg.centered=false
 	bg.position=Vector2(-3,-2)
@@ -72,8 +78,79 @@ func _ready() -> void:
 	top.add_child(pad)
 	touch_layout=pad.enabled
 	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if touch_layout:
+		# The street below the campus can extend into the thumb controls without cropping the buildings.
+		pavement = Sprite2D.new()
+		pavement.texture = BG
+		pavement.centered = false
+		pavement.region_enabled = true
+		pavement.z_index = bg.z_index
+		arena.add_child(pavement)
+		bg.region_enabled = true
+		get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+		get_viewport().size_changed.connect(_layout_mobile)
+		_layout_mobile()
+		# Safari can update safe-area insets independently of the canvas size.
+		if OS.has_feature("web"):
+			var safe_timer := Timer.new()
+			safe_timer.wait_time = 0.5
+			safe_timer.timeout.connect(_layout_mobile)
+			add_child(safe_timer)
+			safe_timer.start()
+	var settings := ConfigFile.new()
+	if settings.load(DIFFICULTY_SETTINGS) == OK:
+		controls.easy_cpu = settings.get_value("match", "easy_cpu", touch_layout)
+	else:
+		controls.easy_cpu = touch_layout
 	get_tree().auto_accept_quit=false
 	get_window().close_requested.connect(_close)
+
+func touch_safe_rect() -> Rect2:
+	return safe_area if touch_layout else get_viewport_rect()
+
+func _layout_mobile() -> void:
+	var view := get_viewport_rect().size
+	if view.x < 1 or view.y < 1: return
+	var bounds := Rect2(Vector2.ZERO, view)
+	touch_css_scale = view.x / maxf(get_window().size.x, 1)
+	if OS.has_feature("web") and ClassDB.class_exists("JavaScriptBridge"):
+		var raw = JavaScriptBridge.eval("JSON.stringify(window.campusCatsViewport || null)", true)
+		var metrics = JSON.parse_string(raw) if raw is String else null
+		if metrics is Dictionary and metrics.get("width", 0) > 0 and metrics.get("height", 0) > 0:
+			var units := view / Vector2(metrics.width, metrics.height)
+			touch_css_scale = units.x
+			var start := Vector2(metrics.get("left", 0), metrics.get("top", 0)) * units
+			var end := view - Vector2(metrics.get("right", 0), metrics.get("bottom", 0)) * units
+			if end.x > start.x and end.y > start.y:
+				bounds = Rect2(start, end - start)
+	safe_area = bounds
+	cutin.safe_area = bounds
+	var css_height := bounds.size.y / maxf(0.01, touch_css_scale)
+	var thumb_room := clampf(inverse_lerp(400.0, 630.0, css_height), 0.0, 1.0)
+	var stage_scale := minf(bounds.size.x / 960.0, bounds.size.y / 540.0) * lerpf(0.88, 1.0, thumb_room)
+	arena_view.scale = Vector2.ONE * stage_scale
+	var floor_point := Vector2(bounds.get_center().x, bounds.position.y + bounds.size.y * lerpf(0.65, 0.80, thumb_room))
+	arena_view.position = floor_point - Vector2(480, Fighter.FLOOR_Y) * stage_scale
+	# Keep the playable space stable; the campus illustration continues to every edge.
+	var visible_stage := Rect2(-arena_view.position / stage_scale, view / stage_scale).grow(6)
+	var street_start := roundf(BG.get_height() * 0.81)
+	var street_height := BG.get_height() - street_start
+	var bg_scale := maxf(visible_stage.size.x / BG.get_width(), (Fighter.FLOOR_Y - visible_stage.position.y) / street_start)
+	bg.region_rect = Rect2(0, 0, BG.get_width(), street_start)
+	bg.scale = Vector2.ONE * bg_scale
+	bg.position = Vector2(visible_stage.get_center().x - BG.get_width() * bg_scale * 0.5, Fighter.FLOOR_Y - street_start * bg_scale)
+	pavement.region_rect = Rect2(0, street_start - 1, BG.get_width(), street_height + 1)
+	pavement.position = Vector2(bg.position.x, Fighter.FLOOR_Y - bg_scale)
+	pavement.scale = Vector2(bg_scale, maxf(bg_scale, (visible_stage.end.y - Fighter.FLOOR_Y) / street_height))
+
+func toggle_difficulty() -> void:
+	if state != "select" or not vs_cpu: return
+	controls.easy_cpu = not controls.easy_cpu
+	var settings := ConfigFile.new()
+	settings.load(DIFFICULTY_SETTINGS)
+	settings.set_value("match", "easy_cpu", controls.easy_cpu)
+	settings.save(DIFFICULTY_SETTINGS)
+	sound.play("select")
 
 func _close() -> void:
 	if closing: return
@@ -91,7 +168,7 @@ func set_slot(index:int) -> void:
 	cursor=clampi(index,0,1)
 
 func toggle_mode() -> void:
-	if state=="select":
+	if state=="select" and not touch_layout:
 		vs_cpu=not vs_cpu
 		sound.play("select")
 
@@ -200,6 +277,7 @@ func _unhandled_key_input(e:InputEvent) -> void:
 			KEY_LEFT,KEY_A: choose(picks[cursor]-1)
 			KEY_RIGHT,KEY_D: choose(picks[cursor]+1)
 			KEY_M: toggle_mode()
+			KEY_N: toggle_difficulty()
 			KEY_ENTER,KEY_KP_ENTER: start_match()
 	elif state=="match_end":
 		if k in [KEY_ENTER,KEY_KP_ENTER,KEY_R]: rematch()
