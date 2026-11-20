@@ -13,13 +13,13 @@
 <link rel="icon" type="image/png" href="./app-icon.png">
 <title>课间猫擂台</title>
 <style>
-:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#101e28;color:#fff0d1}
+:root{--safe-top:env(safe-area-inset-top,0px);--safe-right:env(safe-area-inset-right,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--safe-left:env(safe-area-inset-left,0px);color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#101e28;color:#fff0d1}
 *{box-sizing:border-box}
 html,body{width:100%;height:100%;margin:0;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;touch-action:none}
-#frame{position:fixed;inset:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);background:#101e28}
-#canvas{display:block;width:100%;height:100%;border:0;outline:none;touch-action:none;-webkit-touch-callout:none}
+#frame{position:fixed;inset:0;width:100%;height:100%;width:100dvw;height:100dvh;padding:var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);background:#101e28}
+#canvas{position:absolute;inset:0;display:block;width:100%;height:100%;border:0;outline:none;touch-action:none;-webkit-touch-callout:none}
 [hidden]{display:none!important}
-.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px 20px;text-align:center;background:radial-gradient(ellipse at 50% 65%,#223a44,#101e28 78%)}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:max(12px,var(--safe-top)) max(20px,var(--safe-right)) max(12px,var(--safe-bottom)) max(20px,var(--safe-left));text-align:center;background:radial-gradient(ellipse at 50% 65%,#223a44,#101e28 78%)}
 h1,h2,p{margin:0;text-wrap:balance}
 h1,h2{font-size:clamp(26px,5vw,41px);letter-spacing:.02em;line-height:1.18}
 p{max-width:32em;font-size:15px;line-height:1.5;color:#dfdecd}
@@ -56,7 +56,7 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
 <script>
 // VERSIONED_ASSETS is filled by build_mobile_cache.py when preparing a web export.
 (() => {
-  const assets = {"index.pck":{"mime":"application/octet-stream","name":"index-7d0360b0f98f66ad.pck","revision":1795184714649,"suffix":".pck"},"index.wasm":{"mime":"application/wasm","name":"index-fc74679e3b97f768.wasm","revision":1795184747990,"suffix":".wasm"}};
+  const assets = {"index.pck":{"mime":"application/octet-stream","name":"index-abde5ef283f64290.pck","revision":1795186791084,"suffix":".pck"},"index.wasm":{"mime":"application/wasm","name":"index-fc74679e3b97f768.wasm","revision":1795186784857,"suffix":".wasm"}};
   const base = new URL("./", document.baseURI);
   const cacheName = "campus-cats-assets-v1:" + base.pathname;
   let pendingCache;
@@ -142,7 +142,14 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
   let prepared = false;
   let preparation;
   function resize() {
-    const frame = el("frame").getBoundingClientRect();
+    const element = el("frame");
+    const frame = element.getBoundingClientRect();
+    const padding = getComputedStyle(element);
+    window.campusCatsViewport = {
+      width: frame.width, height: frame.height,
+      left: parseFloat(padding.paddingLeft), right: parseFloat(padding.paddingRight),
+      top: parseFloat(padding.paddingTop), bottom: parseFloat(padding.paddingBottom)
+    };
     const scale = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(1,Math.round(frame.width * scale));
     const h = Math.max(1,Math.round(frame.height * scale));
@@ -197,7 +204,7 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
       await loadDriver();
       const missing = Engine.getMissingFeatures({threads:false});
       if (missing.length) throw new Error("此浏览器缺少运行支持：" + missing.join("、"));
-      const config = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":9045496,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+      const config = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":9064120,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
       const engine = new Engine({...config, canvas, canvasResizePolicy:0, onProgress:progress});
       const exe = config.executable;
       const pack = config.mainPack || exe + ".pck";
