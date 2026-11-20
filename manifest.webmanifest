@@ -1,0 +1,23 @@
+{
+  "id": "./",
+  "name": "课间猫擂台",
+  "short_name": "猫擂台",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "orientation": "landscape",
+  "background_color": "#101e28",
+  "theme_color": "#101e28",
+  "icons": [
+    {
+      "src": "./app-icon.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    }
+  ]
+}
