@@ -44,6 +44,7 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
   <section id="turn" class="screen" hidden>
     <h2>横过手机，进入擂台</h2>
     <p>左右手同时操作，竖屏锁定时请先解锁旋转。</p>
+    <p id="turn-status" class="hint" hidden></p>
     <p class="hint" id="turn-install" hidden></p>
   </section>
   <section id="desktop" class="screen" hidden>
@@ -51,6 +52,66 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
     <p>用手机打开本网址，横屏进入游戏。</p>
   </section>
 </main>
+<!-- mobile-cache -->
+<script>
+// VERSIONED_ASSETS is filled by build_mobile_cache.py when preparing a web export.
+(() => {
+  const assets = {"index.pck":{"mime":"application/octet-stream","name":"index-7d0360b0f98f66ad.pck","revision":1795184714649,"suffix":".pck"},"index.wasm":{"mime":"application/wasm","name":"index-fc74679e3b97f768.wasm","revision":1795184747990,"suffix":".wasm"}};
+  const base = new URL("./", document.baseURI);
+  const cacheName = "campus-cats-assets-v1:" + base.pathname;
+  let pendingCache;
+
+  function openCache() {
+    if (!pendingCache) {
+      pendingCache = caches.open(cacheName).catch(() => null);
+    }
+    return pendingCache;
+  }
+
+  async function store(cache, url, copy, asset) {
+    // This copy is consumed concurrently with the game. A failed cache write must not
+    // delay or cancel the original response, including when the device runs out of space.
+    const headers = new Headers(copy.headers);
+    headers.set("x-cats-revision-time", String(asset.revision));
+    await cache.put(url, new Response(copy.body, {headers}));
+    const prefix = new URL("index-", base).href;
+    for (const key of await cache.keys()) {
+      if (key.url === url || !key.url.startsWith(prefix)) continue;
+      const name = key.url.slice(prefix.length);
+      if (!/^[a-f0-9]{16}\.(wasm|pck)$/.test(name) || !name.endsWith(asset.suffix)) continue;
+      const previous = await cache.match(key);
+      const revision = Number(previous?.headers.get("x-cats-revision-time"));
+      // A slower, older tab must never evict the assets of a newer release.
+      if (previous && revision < asset.revision) await cache.delete(key);
+    }
+  }
+
+  window.campusCatsFetchAsset = async function(file) {
+    const original = new URL(file, document.baseURI);
+    const name = original.pathname.slice(base.pathname.length);
+    const asset = assets[name];
+    if (original.origin !== base.origin || !original.pathname.startsWith(base.pathname)
+        || original.search || !Object.prototype.hasOwnProperty.call(assets, name)) {
+      return fetch(file);
+    }
+    const url = new URL(asset.name, base).href;
+    let cache;
+    try {
+      cache = await openCache();
+      const hit = cache && await cache.match(url);
+      if (hit) return hit;
+    } catch {
+      // Private browsing or browser storage policy can disallow Cache Storage.
+    }
+    const response = await fetch(url);
+    if (cache && response.status === 200 && response.headers.get("Content-Type")?.split(";")[0] === asset.mime) {
+      store(cache, url, response.clone(), asset).catch(() => {});
+    }
+    return response;
+  };
+})();
+</script>
+<!-- /mobile-cache -->
 <script>
 (() => {
   const el = id => document.getElementById(id);
@@ -78,6 +139,8 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
   }
   let loading = false;
   let ready = false;
+  let prepared = false;
+  let preparation;
   function resize() {
     const frame = el("frame").getBoundingClientRect();
     const scale = Math.min(window.devicePixelRatio || 1, 2);
@@ -103,43 +166,75 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
   function loadDriver() {
     return new Promise((resolve,reject) => {
       const script = document.createElement("script");
-      script.src = "index.js";
+      script.src = "index.js?v=f1e6b1e273651d96";
       script.onload = resolve;
       script.onerror = reject;
       document.head.append(script);
     });
+  }
+  function status(text) {
+    if (ready || !boot.isConnected) return;
+    for (const id of ["status", "turn-status"]) {
+      const label = el(id);
+      label.textContent = text;
+      label.hidden = false;
+    }
+  }
+  function progress(done, total) {
+    if (prepared || ready || !total) return;
+    const bar = el("progress");
+    bar.hidden = false;
+    bar.max = total;
+    bar.value = done;
+    status(done >= total ? "下载完成，正在准备对战引擎…" :
+      "正在下载游戏资源 · " + Math.floor(100 * done / total) + "%");
+  }
+  function prepare() {
+    if (preparation) return preparation;
+    preparation = (async () => {
+      if (!window.isSecureContext) throw new Error("请通过 HTTPS 打开这个网址。");
+      status("正在连接擂台…");
+      await loadDriver();
+      const missing = Engine.getMissingFeatures({threads:false});
+      if (missing.length) throw new Error("此浏览器缺少运行支持：" + missing.join("、"));
+      const config = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":9045496,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+      const engine = new Engine({...config, canvas, canvasResizePolicy:0, onProgress:progress});
+      const exe = config.executable;
+      const pack = config.mainPack || exe + ".pck";
+      // Begin compiling the engine while the game data downloads. start() uses this same instance.
+      await Promise.all([Engine.load(exe, config.fileSizes[exe + ".wasm"]), engine.init(exe), engine.preloadFile(pack, pack)]);
+      prepared = true;
+      el("progress").hidden = true;
+      status(loading ? "正在打开选角界面…" : "已准备好，可以进入游戏");
+      return {engine, pack, args:config.args || []};
+    })();
+    return preparation;
+  }
+  function showError(error) {
+    console.error(error);
+    const message = error instanceof Error && /^(请通过|此浏览器)/.test(error.message)
+      ? error.message : "载入失败，请检查网络后重试。";
+    status(message);
+    fail(message);
   }
   async function launch() {
     if (loading) return;
     loading = true;
     start.hidden = true;
     el("install").hidden = true;
-    el("status").hidden = false;
-    el("status").textContent = "正在载入擂台…";
-    if (!window.isSecureContext) {fail("请通过 HTTPS 打开这个网址。");return;}
-    el("progress").hidden = false;
     try {
-      await loadDriver();
-      const missing = Engine.getMissingFeatures({threads:false});
-      if (missing.length) {fail("此浏览器缺少运行支持：" + missing.join("、"));return;}
-      const engine = new Engine({"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":26126232,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4});
+      const {engine, pack, args} = await prepare();
+      status("正在打开选角界面…");
       resize();
-      await engine.startGame({canvas,canvasResizePolicy:0,onProgress:(done,total) => {
-        if (ready || !boot.isConnected) return;
-        if (total) {
-          el("progress").max = total;
-          el("progress").value = done;
-          el("status").textContent = "正在载入擂台… " + Math.round(100*done/total) + "%";
-        }
-      }});
+      await engine.start({args:["--main-pack",pack,...args]});
       ready = true;
       boot.remove();
+      el("turn-status").hidden = true;
       resize();
       if (portrait.matches) canvas.blur();
       else canvas.focus({preventScroll:true});
     } catch (err) {
-      console.error(err);
-      fail("游戏载入失败，请检查网络，再重新载入。");
+      showError(err);
     }
   }
   start.textContent = canFullscreen && !standalone ? "全屏进入游戏" : "进入游戏";
@@ -162,6 +257,9 @@ progress{width:min(240px,65vw);height:9px;accent-color:#ffcf67}
   if (portrait.addEventListener) portrait.addEventListener("change",rotate);
   else portrait.addListener(rotate);
   rotate();
+  if (!loading && !navigator.connection?.saveData && !matchMedia("(prefers-reduced-data: reduce)").matches) {
+    prepare().catch(showError);
+  }
 })();
 </script>
 </body>
